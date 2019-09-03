@@ -1,0 +1,306 @@
+
+#include "src/HashMap.h"
+#include "mu_test.h"
+#include <stdio.h>
+
+size_t HashFunctionMod(const void* _key);
+int EqualityFunctionInt(const void* _firstKey, const void* _secondKey);
+
+
+
+size_t HashFunctionMod(const void* _key)
+{
+    const int *key = _key;
+    
+    return ((*key) % 5);
+
+}
+
+int EqualityFunctionInt(const void* _firstKey, const void* _secondKey)
+{
+    
+    return ((*(int *)_firstKey) == (*(int *)_secondKey));
+}
+
+
+int	KeyValueActionFunctionInt(const void* _key, void* _value, void* _context)
+{
+	int *x = _value;
+
+	*x += 1000;
+	printf("\nthe next value is: %d\n", *x);
+	return 1;
+}
+
+
+
+UNIT(Insert_normal)
+
+    Map_Result error;
+    HashMap* map;
+    int i;
+    int keyArr[] = {1,2,3,4};
+    int valArr[] = {22,33,44,55};
+    map = HashMap_Create(5, HashFunctionMod, EqualityFunctionInt);
+    ASSERT_THAT(map != NULL);
+
+    for (i = 0; i < 4; ++i)
+    {
+        error = HashMap_Insert(map, &keyArr[i], &valArr[i]);
+        ASSERT_THAT(error == MAP_SUCCESS);
+
+    }
+
+
+    ASSERT_THAT(HashMap_Size(map) == 4);
+
+END_UNIT
+
+
+UNIT(Insert_duplicate_key)
+
+    Map_Result error;
+    HashMap* map;
+    int i;
+    int keyArr[] = {1,2,3,3};
+    int valArr[] = {22,33,44,55};
+    map = HashMap_Create(5, HashFunctionMod, EqualityFunctionInt);
+    ASSERT_THAT(map != NULL);
+
+    for (i = 0; i < 3; ++i)
+    {
+        error = HashMap_Insert(map, keyArr + i, valArr + i);
+        ASSERT_THAT(error == MAP_SUCCESS);
+
+    }
+    /*printf("\n%d\n",i);*/
+    error = HashMap_Insert(map, keyArr + i, valArr + i);
+    ASSERT_THAT(error == MAP_KEY_DUPLICATE_ERROR);
+
+    ASSERT_THAT(HashMap_Size(map) == 3);
+
+END_UNIT
+
+
+
+
+
+
+UNIT(remove_normal)
+
+    Map_Result error;
+    HashMap* map;
+    const void *pKey, *pVal;
+    int i;
+    int keyArr[] = {1,2,3,5};
+    int valArr[] = {22,33,44,55};
+    map = HashMap_Create(5, HashFunctionMod, EqualityFunctionInt);
+    ASSERT_THAT(map != NULL);
+
+    for (i = 0; i < 4; ++i)
+    {
+        error = HashMap_Insert(map, keyArr + i, valArr + i);
+        ASSERT_THAT(error == MAP_SUCCESS);
+
+    }
+    /*printf("\n%d\n",i);*/
+
+    ASSERT_THAT(HashMap_Size(map) == 4);
+
+
+    error = HashMap_Remove(map, &keyArr[3], &pKey, &pVal);
+
+    ASSERT_THAT((*(int *)(pKey)) == 5);
+    ASSERT_THAT((*(int *)(pVal)) == 55);
+
+    ASSERT_THAT(HashMap_Size(map) == 3);
+
+
+END_UNIT
+
+
+UNIT(remove_till_empty_and_remove)
+
+    Map_Result error;
+    HashMap* map;
+    const void *pKey, *pVal;
+    int i;
+    int keyArr[] = {1,2,3,5};
+    int valArr[] = {11,22,33,55};
+    map = HashMap_Create(5, HashFunctionMod, EqualityFunctionInt);
+    ASSERT_THAT(map != NULL);
+
+    for (i = 0; i < 4; ++i)
+    {
+        error = HashMap_Insert(map, keyArr + i, valArr + i);
+        ASSERT_THAT(error == MAP_SUCCESS);
+
+    }
+    /*printf("\n%d\n",i);*/
+
+    ASSERT_THAT(HashMap_Size(map) == 4);
+
+
+    error = HashMap_Remove(map, &keyArr[3], &pKey, &pVal);
+    ASSERT_THAT(error == MAP_SUCCESS);
+    ASSERT_THAT((*(int *)(pKey)) == 5);
+    ASSERT_THAT((*(int *)(pVal)) == 55);
+
+    ASSERT_THAT(HashMap_Size(map) == 3);
+
+
+    error = HashMap_Remove(map, &keyArr[2], &pKey, &pVal);
+    ASSERT_THAT(error == MAP_SUCCESS);
+    ASSERT_THAT((*(int *)(pKey)) == 3);
+    ASSERT_THAT((*(int *)(pVal)) == 33);
+
+    ASSERT_THAT(HashMap_Size(map) == 2);
+   
+   
+    error = HashMap_Remove(map, &keyArr[1], &pKey, &pVal);
+    ASSERT_THAT(error == MAP_SUCCESS);
+    ASSERT_THAT((*(int *)(pKey)) == 2);
+    ASSERT_THAT((*(int *)(pVal)) == 22);
+
+    ASSERT_THAT(HashMap_Size(map) == 1);
+    
+    
+    error = HashMap_Remove(map, &keyArr[0], &pKey, &pVal);
+    ASSERT_THAT(error == MAP_SUCCESS);
+    ASSERT_THAT((*(int *)(pKey)) == 1);
+    ASSERT_THAT((*(int *)(pVal)) == 11);
+
+    ASSERT_THAT(HashMap_Size(map) == 0);
+    
+    error = HashMap_Remove(map, &keyArr[3], &pKey, &pVal);
+
+    ASSERT_THAT(error == MAP_KEY_NOT_FOUND_ERROR);
+    ASSERT_THAT(HashMap_Size(map) == 0);
+    
+    
+    error = HashMap_Remove(map, &keyArr[3], &pKey, &pVal);
+
+    ASSERT_THAT(error == MAP_KEY_NOT_FOUND_ERROR);
+
+    ASSERT_THAT(HashMap_Size(map) == 0);
+
+
+END_UNIT
+
+UNIT(for_each)
+
+    Map_Result error;
+    size_t numOfInvokes;
+    HashMap* map;
+    const void *pKey, *pVal; 
+    int i;
+    int keyArr[] = {1,2,3,5};
+    int valArr[] = {22,33,44,55};
+    map = HashMap_Create(5, HashFunctionMod, EqualityFunctionInt);
+    ASSERT_THAT(map != NULL);
+
+    for (i = 0; i < 4; ++i)
+    {
+        error = HashMap_Insert(map, keyArr + i, valArr + i);
+        ASSERT_THAT(error == MAP_SUCCESS);
+
+    }
+    /*printf("\n%d\n",i);*/
+
+    ASSERT_THAT(HashMap_Size(map) == 4);
+
+	numOfInvokes = HashMap_ForEach(map, KeyValueActionFunctionInt, NULL);
+	ASSERT_THAT(numOfInvokes == 4);
+
+    error = HashMap_Remove(map, &keyArr[3], &pKey, &pVal);
+
+    ASSERT_THAT((*(int *)(pKey)) == 5);
+    ASSERT_THAT((*(int *)(pVal)) == 1055);
+
+    ASSERT_THAT(HashMap_Size(map) == 3);
+   	putchar('\n');
+	numOfInvokes = HashMap_ForEach(map, KeyValueActionFunctionInt, NULL);
+	ASSERT_THAT(numOfInvokes == 3);
+
+
+END_UNIT
+
+
+
+
+UNIT(for_each_empty_hash)
+
+    Map_Result error;
+    HashMap* map;
+
+
+    map = HashMap_Create(5, HashFunctionMod, EqualityFunctionInt);
+    ASSERT_THAT(map != NULL);
+
+
+
+    ASSERT_THAT(HashMap_Size(map) == 0);
+
+
+	numOfInvokes = HashMap_ForEach(map, KeyValueActionFunctionInt, NULL);
+	ASSERT_THAT(numOfInvokes == 0);
+
+END_UNIT
+
+
+
+
+
+UNIT(for_each_after_all_elements_removed)
+
+    Map_Result error;
+    HashMap* map;
+    const void *pKey, *pVal;
+    int i;
+    int keyArr[] = {1,2,3,5};
+    int valArr[] = {22,33,44,55};
+    map = HashMap_Create(5, HashFunctionMod, EqualityFunctionInt);
+    ASSERT_THAT(map != NULL);
+
+    for (i = 0; i < 4; ++i)
+    {
+        error = HashMap_Insert(map, keyArr + i, valArr + i);
+        ASSERT_THAT(error == MAP_SUCCESS);
+
+    }
+    /*printf("\n%d\n",i);*/
+
+    ASSERT_THAT(HashMap_Size(map) == 4);
+
+
+    error = HashMap_Remove(map, &keyArr[3], &pKey, &pVal);
+
+    ASSERT_THAT((*(int *)(pKey)) == 5);
+    ASSERT_THAT((*(int *)(pVal)) == 55);
+
+    ASSERT_THAT(HashMap_Size(map) == 3);
+
+
+END_UNIT
+
+
+
+
+
+
+
+
+TEST_SUITE(framework test)
+	TEST(Insert_normal)
+	TEST(Insert_duplicate_key)
+    TEST(remove_normal)
+    TEST(remove_till_empty_and_remove)
+	TEST(for_each)
+	TEST(for_each_empty_hash)
+END_SUITE
+
+
+
+
+
+

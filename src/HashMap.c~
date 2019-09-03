@@ -1,0 +1,447 @@
+
+
+
+
+
+#include "HashMap.h"
+#include "list_functions.h"
+/*#include "list_itr.h"*/
+#include <stdlib.h>
+#include <stdio.h>
+
+
+
+struct HashMap{
+    List ** m_list;
+    size_t m_capacity;
+    HashFunction m_hashFunc;
+    EqualityFunction m_keysEqualFunc;
+    size_t m_numOfElements; /* all elements in all lists */
+    size_t m_numberOfChains; /* num of Lists that are not null */
+};
+
+
+
+
+typedef struct KeyValuePair
+{
+    const void *m_key;
+    const void *m_value;
+}KeyValuePair;
+
+
+
+
+typedef struct Contx
+{
+    const void *m_key;
+    EqualityFunction m_keysEqualFunc;
+    size_t m_numOfInvokes;
+    KeyValueActionFunction m_KeyValAction; 
+    void* m_context;
+}Contx;
+
+
+
+
+
+
+static ListItr findKeyIterator(const HashMap* _map, const void* _searchKey, size_t indexInHashTable);
+int isKeyEqual(void *_element, void *_context);
+/*static int findKey(HashMap* _map, const void* _searchKey, size_t indexInHashTable);*/
+
+
+
+
+
+
+int isKeyEqual(void *_element, void *_context)
+{
+    Contx *contx = _context;
+    /*
+        printf("\nthis %d\n", (*(int*)(((Contx *)_context))->m_key));
+        printf("\n\n  that  %d   \n", (int)_element);
+    */
+    if (contx->m_keysEqualFunc((((KeyValuePair *)_element)->m_key), contx->m_key))
+    {
+        return 1;
+    }
+    return 0;
+}
+
+
+
+
+HashMap* HashMap_Create(size_t _capacity, HashFunction _hashFunc, EqualityFunction _keysEqualFunc)
+{
+    HashMap * hash;
+    List **listArr;
+
+    if ((_capacity == 0) || (_hashFunc == NULL) || (_keysEqualFunc == NULL))
+    {
+        return NULL;
+    }
+    
+    hash = (HashMap *)malloc(sizeof(HashMap));
+    if (hash == NULL)
+    {
+        return NULL;
+    }
+    
+    listArr = (List **)calloc(_capacity, sizeof(List *));
+    if (listArr == NULL)
+    {
+        free(hash);
+        return NULL;
+    }
+    hash->m_list = listArr;
+    hash->m_capacity = _capacity;
+    hash->m_hashFunc = _hashFunc;
+    hash->m_keysEqualFunc = _keysEqualFunc;
+    hash->m_numOfElements = 0;
+    hash->m_numberOfChains = 0;
+    
+    return hash;
+}
+
+/*
+static bool IsPrime(int p)
+{
+    for (int i = 3; i < Math.Sqrt(p); i += 2)
+    {
+        if (p % i == 0)
+            return false;
+    }
+
+    return true;
+}
+*/
+
+/*
+static void destroyList(List *_list, _keyDestroy _kd, );
+
+typedef void (*_keyDestroy)(void* _key);
+*/
+
+
+void HashMap_Destroy(HashMap** _map, void (*_keyDestroy)(const void* _key), void (*_valDestroy)(const void* _value))
+{
+    ListItr itrBegin, itrEnd, itrPrev;
+    KeyValuePair *kvPair;
+    size_t i;
+    List *tempList;
+    if ((_map == NULL) || (*_map == NULL))
+    {
+        return;
+    }
+    
+    /* release lists */
+    for (i = 0; i < ((*_map)->m_capacity); ++i)
+    {
+        tempList = (*_map)->m_list[i];
+        
+        
+        if (tempList != NULL)
+        {
+            itrBegin = ListItr_Begin(tempList);
+            itrBegin = ListItr_Next(itrBegin);
+            itrEnd = ListItr_End(tempList);
+            
+            
+            while (itrBegin != itrEnd)
+            {
+                itrPrev = ListItr_Prev(itrBegin);
+                kvPair = ListItr_Remove(itrPrev);
+                
+                if (_keyDestroy != NULL)
+                {
+                    _keyDestroy(kvPair->m_key);
+                }
+                if (_valDestroy != NULL)
+                {
+                    _valDestroy(kvPair->m_value);
+                }
+                
+                free(kvPair);
+                kvPair = NULL;
+                
+                itrBegin = ListItr_Next(itrBegin);
+            }
+            
+            List_Destroy(&((*_map)->m_list[i]), NULL);
+        
+        }
+        
+    }
+    
+    free((*_map)->m_list);
+    free(*_map);
+    *_map = NULL;
+}
+
+
+Map_Result HashMap_Insert(HashMap* _map, const void* _key, const void* _value)
+{
+    KeyValuePair * kvPair;
+    size_t indexInHashTable;
+    ListItr itrEnd, isFoundItr;
+    List * list;
+    
+    if (_map == NULL)
+    {
+        return MAP_UNINITIALIZED_ERROR;
+    }
+    if (_key == NULL)
+    {
+        return MAP_KEY_NULL_ERROR;
+    }
+    
+    
+    indexInHashTable = (_map->m_hashFunc(_key)) % (_map->m_capacity);
+    
+    if (_map->m_list[indexInHashTable] == NULL)
+    {
+        list = List_Create();
+        _map->m_list[indexInHashTable] = list;
+        ++_map->m_numberOfChains;
+    }
+    
+    isFoundItr = findKeyIterator(_map, _key, indexInHashTable);
+
+    itrEnd = ListItr_End(_map->m_list[indexInHashTable]);
+
+    if (ListItr_Equals(isFoundItr, itrEnd)) /* the element is not on the hash table - let's insert it! */
+    {
+        kvPair = (KeyValuePair *)malloc(sizeof(KeyValuePair));
+        if (kvPair == NULL)
+        {
+            return MAP_ALLOCATION_ERROR;
+        }
+        kvPair->m_key = _key;
+        kvPair->m_value = _value;
+        
+        
+        ListItr_InsertBefore(itrEnd, kvPair);
+        /*List_PushTail(list, kvPair);*/
+
+        ++_map->m_numOfElements;
+        
+        return MAP_SUCCESS;
+    }
+    
+    return MAP_KEY_DUPLICATE_ERROR;
+}
+
+
+
+size_t HashMap_Size(const HashMap* _map)
+{
+    if (_map == NULL)
+    {
+        return 0;
+    }
+    
+    return _map->m_numOfElements;
+
+}
+
+
+
+Map_Result HashMap_Remove(HashMap* _map, const void* _searchKey, const void** _pKey, const void** _pValue)
+{
+    KeyValuePair * kvPair;
+    size_t indexInHashTable;
+    ListItr itrEnd, isFoundItr;
+    /*List * list;*/
+    
+    if ((_map == NULL) || (_pKey == NULL) || (_pValue == NULL))
+    {
+        return MAP_UNINITIALIZED_ERROR;
+    }
+    if (_searchKey == NULL)
+    {
+        return MAP_KEY_NULL_ERROR;
+    }
+
+    
+    indexInHashTable = (_map->m_hashFunc(_searchKey)) % (_map->m_capacity);
+    
+    if (_map->m_list[indexInHashTable] == NULL)
+    {
+        return MAP_KEY_NOT_FOUND_ERROR;
+    }
+    
+    isFoundItr = findKeyIterator(_map, _searchKey, indexInHashTable);
+
+    itrEnd = ListItr_End(_map->m_list[indexInHashTable]);
+
+    if (!ListItr_Equals(isFoundItr, itrEnd)) /* key found - remove */
+    {
+        kvPair = ListItr_Remove(isFoundItr);
+        --_map->m_numOfElements;
+
+        *_pKey = kvPair->m_key;
+        *_pValue = kvPair->m_value;
+        
+        free(kvPair);
+        
+        return MAP_SUCCESS;
+    }
+    
+    /* Key not found  */
+
+    return MAP_KEY_NOT_FOUND_ERROR;
+}
+
+
+
+/* typedef int	(*elementActionFunction)(ListItr _itr, void* _context); */
+
+
+
+static ListItr findKeyIterator(const HashMap* _map, const void* _searchKey, size_t indexInHashTable)
+{
+    ListItr itrBegin, itrEnd, isFoundItr;
+    Contx contx;
+    
+    itrEnd = ListItr_End(_map->m_list[indexInHashTable]);
+    itrBegin = ListItr_Begin(_map->m_list[indexInHashTable]);
+
+    contx.m_key = _searchKey;
+    contx.m_keysEqualFunc = _map->m_keysEqualFunc;
+    
+    isFoundItr = ListItr_FindFirst(itrBegin, itrEnd, isKeyEqual, &contx);
+
+    return isFoundItr;
+}
+
+
+Map_Result HashMap_Find(const HashMap* _map, const void* _key, const void** _pValue)
+{
+    KeyValuePair * kvPair;
+    size_t indexInHashTable;
+    ListItr itrEnd, isFoundItr;
+    
+    if ((_map == NULL) || (_pValue == NULL))
+    {
+        return MAP_UNINITIALIZED_ERROR;
+    }
+    if (_key == NULL)
+    {
+        return MAP_KEY_NULL_ERROR;
+    }
+
+    
+    indexInHashTable = (_map->m_hashFunc(_key)) % (_map->m_capacity);
+    
+    if (_map->m_list[indexInHashTable] == NULL)
+    {
+        return MAP_KEY_NOT_FOUND_ERROR;
+    }
+    
+    isFoundItr = findKeyIterator(_map, _key, indexInHashTable);
+
+    itrEnd = ListItr_End(_map->m_list[indexInHashTable]);
+
+    if (!ListItr_Equals(isFoundItr, itrEnd)) /* key found */
+    {
+        kvPair = ListItr_Get(isFoundItr);
+
+        *_pValue = kvPair->m_value;
+        
+        return MAP_SUCCESS;
+    }
+    
+    /* Key not found  */
+    return MAP_KEY_NOT_FOUND_ERROR;
+}
+
+
+int ListActionFunctionHash(void* _element, void* _context)
+{
+	Contx *contx = _context;
+    KeyValuePair * kvPair = _element;
+    
+    ++contx->m_numOfInvokes;
+    
+    return contx->m_KeyValAction(kvPair->m_key, (void *)kvPair->m_value, contx->m_context);
+}
+
+
+/* typedef int	(*KeyValueActionFunction)(const void* _key, void* _value, void* _context); */
+
+/*
+
+typedef struct Contx
+{
+    const void *m_key;
+    EqualityFunction m_keysEqualFunc;
+    size_t m_numOfInvokes;
+    KeyValueActionFunction m_KeyValAction; 
+    void* m_context;
+}Contx;
+
+
+struct HashMap{
+    List ** m_list;
+    size_t m_capacity;
+    HashFunction m_hashFunc;
+    EqualityFunction m_keysEqualFunc;
+    size_t m_numOfElements; 
+    size_t m_numberOfChains; 
+};
+
+
+*/
+
+size_t HashMap_ForEach(const HashMap* _map, KeyValueActionFunction _action, void* _context)
+{
+    size_t i, numOfChains;
+    Contx contx;
+    ListItr itrEnd, itrBegin;
+    List *curList;
+
+	contx.m_numOfInvokes = 0;
+	contx.m_KeyValAction = _action;
+	contx.m_context = _context;
+	contx.m_keysEqualFunc = _map->m_keysEqualFunc;
+	
+    if (_map == NULL)
+    {
+        return MAP_UNINITIALIZED_ERROR;
+    }
+    if (_action == NULL)
+    {
+    	return MAP_FUNC_NULL_ERROR;
+    }
+    
+    /*Iterate on all existing lists in hash: */
+    for (i = 0, numOfChains = 0; (i < _map->m_capacity) && (numOfChains < _map->m_numberOfChains); ++i)
+    {
+    	curList = _map->m_list[i];
+    	if (curList != NULL) 
+    	{
+    		++numOfChains;  /* don't iterate more than num of lists(chains) exist on hash. */
+    		itrEnd = ListItr_End(curList);
+    		itrBegin = ListItr_Begin(curList);
+    		
+    		ListItr_ForEach(itrBegin, itrEnd, ListActionFunctionHash, &contx);
+   
+    	}
+
+    }
+   	
+   	return contx.m_numOfInvokes; 
+    
+
+}
+
+
+
+
+
+
+
+
+
+
